@@ -1,11 +1,10 @@
 Connection = Object.extend(Object)
 
-function Connection:new(r1name, r1x, r1y, r2name, r2x, r2y)
-    self.r1name = r1name;
-    self.r1x = r1x;
-    self.r1y = r1y;
-    self.r2name = r2name;
-    self.r2x = r2x;
-    self.r2y = r2y;
+function Connection:new(r1, r2)
+    self.r1 = tonumber(string.sub(r1, 2));
+    self.r2 = tonumber(string.sub(r2, 2));
     self.value = 1;
+    self.valueContainer = {
+        x, y, w = 20, h = font:getHeight()
+    };
 end
