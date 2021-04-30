@@ -12,12 +12,14 @@ local placingRouter = false;
 local relocatingRouter = 0;
 local connecting = "";
 local connectionsPage = 0;
+local connectionsTabOpen = false;
+local origin, destination = -1, -1;
 
 local mousex, mousey = 0, 0;
 
 Object = require "classic";
-require "router"
-require "connection"
+require "router";
+require "connection";
 
 function love.load()
     love.window.setTitle("OSPF");
@@ -70,7 +72,7 @@ function love.load()
         y = 0,
         w = 0,
         h = 40,
-        bg = {1, 182/255, 193/255},
+        bg = {1, 105/255, 180/255},
         txt = "Select the origin"
     };
     buttons[5] = {
@@ -101,6 +103,27 @@ end
 function love.draw()
     DrawButtons();
     love.graphics.setBackgroundColor(0, 0, 0);
+
+    if origin > -1 then
+        love.graphics.setColor(1, 105/255, 180/255);
+
+        if origin == 0 or not routers[origin].visible then
+            love.graphics.circle("fill", mousex, mousey, routerImage:getWidth() / 2 + 5);
+        else
+            love.graphics.circle("fill", routers[origin].x, routers[origin].y, routerImage:getWidth() / 2 + 5);
+        end
+    end
+
+    if destination > -1 then
+        love.graphics.setColor(147/255, 112/255, 219/255);
+
+        if destination == 0 or not routers[destination].visible then
+            love.graphics.circle("fill", mousex, mousey, routerImage:getWidth() / 2 + 5);
+        else
+            love.graphics.circle("fill", routers[destination].x, routers[destination].y, routerImage:getWidth() / 2 + 5);
+        end
+    end
+
     love.graphics.setColor(46/255, 139/255, 87/255);
 
     --#region drawing circle around router that will be connected to an other originate
@@ -137,9 +160,9 @@ function love.draw()
 
         --values
         local avgx, avgy = (x1 + x2) / 2, (y1 + y2) / 2;
-        love.graphics.rectangle("fill", avgx - Font:getHeight()/2, avgy - Font:getHeight()/2, 20, Font:getHeight());
+        love.graphics.rectangle("fill", avgx - Font:getHeight()/2, avgy - Font:getHeight()/2, 30, Font:getHeight());
         love.graphics.setColor(0, 0, 0);
-        love.graphics.printf(connection.value, math.floor(avgx - Font:getHeight()/2), math.floor(avgy - Font:getHeight()/2), 20, "center"); --rendering text at non-integer intervals may make them blurry
+        love.graphics.printf(connection.value, math.floor(avgx - Font:getHeight()/2), math.floor(avgy - Font:getHeight()/2), 30, "center"); --rendering text at non-integer intervals may make them blurry
         love.graphics.setColor(1, 1, 1);
     end
     --#endregion
@@ -178,16 +201,26 @@ end
 function love.mousepressed(x, y, button, istouch, presses)
     --#region deleting a router when RIGHT mouse button is pressed
     if button == 2 then
-        local routerIndex = PressedRouter(x, y);
+        if placingRouter then
+            placingRouter = false;
+        elseif connecting ~= "" then
+            connecting = "";
+        elseif origin == 0 then
+            origin = -1;
+        elseif destination == 0 then
+            destination = -1;
+        else
+            local routerIndex = PressedRouter(x, y);
 
-        for i, connection in pairs(connections) do
-            if connection.r1 == routerIndex or connection.r2 == routerIndex then
-                connections[i] = nil;
+            for i, connection in pairs(connections) do
+                if connection.r1 == routerIndex or connection.r2 == routerIndex then
+                    connections[i] = nil;
+                end
             end
-        end
 
-        if routerIndex ~= 0 and routers[routerIndex] then
-            routers[routerIndex] = nil;
+            if routerIndex ~= 0 and routers[routerIndex] then
+                routers[routerIndex] = nil;
+            end
         end
     end
     --#endregion
@@ -243,43 +276,94 @@ function love.mousepressed(x, y, button, istouch, presses)
     end
     --#endregion
 
+    --#region selecting origin
+    if origin == 0 then
+        local routerIndex = PressedRouter(x, y);
+        if routerIndex ~= 0 then
+            origin = routerIndex;
+        end
+    end
+    --#endregion
+
+    --#region selecting destination
+    if destination == 0 then
+        local routerIndex = PressedRouter(x, y);
+        if routerIndex ~= 0 then
+            destination = routerIndex;
+        end
+    end
+    --#endregion
+
     --#region button press
     local buttonIndex = PressedButton(x, y);
 
     if buttonIndex == 1 then
         placingRouter = not placingRouter;
+        ConnectionsTab(false);
+        connecting = "";
     elseif buttonIndex == 2 then
         if connecting == "choose" then
             connecting = "";
         else
             connecting = "choose";
         end
-        connecting = "choose"
+        ConnectionsTab(false);
     elseif buttonIndex == 3 then
-        ConnectionsTable();
+        ConnectionsTab(not connectionsTabOpen);
     elseif buttonIndex == 4 then
+        if origin == 0 then
+            origin = -1;
+        else
+            origin = 0;
+        end
     elseif buttonIndex == 5 then
+        if destination == 0 then
+            destination = -1;
+        else
+            destination = 0;
+        end
     elseif buttonIndex == 6 then
     elseif buttonIndex == 7 then
+        origin, destination = -1, -1;
         for i, _ in pairs(routers) do
             routers[i] = nil;
         end
         for i, _ in pairs(connections) do
             connections[i] = nil;
         end
-    elseif buttonIndex == 7 then
-    elseif buttonIndex == 7 then
-    elseif buttonIndex == 7 then
-    elseif buttonIndex == 28 then
+        ConnectionsTab(false);
+    elseif buttons[buttonIndex] and buttons[buttonIndex].txt == "+" then
+        local i = math.ceil((buttonIndex - 7) / 4);
+        connections[connectionsPage * 5 + i].value = connections[connectionsPage * 5 + i].value + 1;
+    elseif buttons[buttonIndex] and buttons[buttonIndex].txt == "-" then
+        local i = math.ceil((buttonIndex - 7) / 4);
+        if connections[connectionsPage * 5 + i].value > 1 then
+            connections[connectionsPage * 5 + i].value = connections[connectionsPage * 5 + i].value - 1;
+        end
+    elseif buttons[buttonIndex] and buttons[buttonIndex].txt == "X" then
+        local i = (buttonIndex - 7) / 4;
+        --connections[connectionsPage * 5 + i] = nil;
+
+        for j = connectionsPage * 5 + i + 1, #connections, 1 do
+            connections[j - 1] = connections[j];
+        end
+
+        connections[#connections] = nil;
+
+        ConnectionsTab(true);
+    elseif buttonIndex == #buttons - 2 then
         if connectionsPage > 0 then
             connectionsPage = connectionsPage - 1;
-            ConnectionsTable(true);
+            ConnectionsTab(true);
         end
-    elseif buttonIndex == 30 then
-        connectionsPage = connectionsPage + 1;
-        ConnectionsTable(true);
+    elseif buttonIndex == #buttons then
+        if connections[(connectionsPage + 1) * 5 + 1] then
+            connectionsPage = connectionsPage + 1;
+        end
+        ConnectionsTab(true);
     end
     --#endregion
+
 end
 
 function love.mousemoved(x, y)
@@ -287,7 +371,7 @@ function love.mousemoved(x, y)
 end
 
 function DrawButtons()
-    for i, button in ipairs(buttons) do
+    for i, button in pairs(buttons) do
         love.graphics.setColor(button.bg);
         love.graphics.rectangle("fill", button.x, button.y, button.w, button.h);
         love.graphics.reset();
@@ -352,48 +436,52 @@ function CreateConnection()
     table.insert(connections, Connection(routers[i].name, routers[j].name));
 
     connecting = "";
+
+    ConnectionsTab(false);
 end
 
-function ConnectionsTable(keepOpen)
+function ConnectionsTab(open)
 
     -- known problems:
     -- > switching to different pages does virtually nothing
     -- > unable to reopen the tab after closing it
     -- > etc?
 
-    if #buttons == 7 or keepOpen then
+    if open then
+        for i = 8, #buttons, 1 do
+            buttons[i] = nil;
+        end
         local colour = {173/255, 216/255, 230/255};
-        local i = connectionsPage * 5 + 1;
-        local j = 1
-        while i <= connectionsPage * 5 + 5 and connections[connectionsPage * 5 + i] do
-            if connections[connectionsPage + 1] then
-                buttons[8 + (j - 1) * 4] = {
+        local i = 1;
+        while i <= 5 and connections[connectionsPage * 5 + i] do
+            if connections[connectionsPage * 5 + i] then
+                buttons[8 + (i - 1) * 4] = {
                     x = 2 * buttonWidth,
-                    y = 40 + (j - 1) * 20,
+                    y = 40 + (i - 1) * 20,
                     w = buttonWidth * 0.6,
                     h = 20,
                     bg = colour,
-                    txt = "R" .. connections[i].r1 .. " - R" .. connections[i].r2
+                    txt = "R" .. connections[connectionsPage * 5 + i].r1 .. " - R" .. connections[connectionsPage * 5 + i].r2
                 };
-                buttons[9 + (j - 1) * 4] = {
+                buttons[9 + (i - 1) * 4] = {
                     x = 2 * buttonWidth + buttons[8].w,
-                    y = 40 + (j - 1) * 20,
+                    y = 40 + (i - 1) * 20,
                     w = buttonWidth * 0.4 / 3,
                     h = 20,
                     bg = colour,
                     txt = "+"
                 };
-                buttons[10 + (j - 1) * 4] = {
+                buttons[10 + (i - 1) * 4] = {
                     x = 2 * buttonWidth + buttons[8].w + buttons[9].w,
-                    y = 40 + (j - 1) * 20,
+                    y = 40 + (i - 1) * 20,
                     w = buttonWidth * 0.4 / 3,
                     h = 20,
                     bg = colour,
                     txt = "-"
                 };
-                buttons[11 + (j - 1) * 4] = {
+                buttons[11 + (i - 1) * 4] = {
                     x = 2 * buttonWidth + buttons[8].w + buttons[9].w + buttons[10].w,
-                    y = 40 + (j - 1) * 20,
+                    y = 40 + (i - 1) * 20,
                     w = buttonWidth * 0.4 / 3,
                     h = 20,
                     bg = colour,
@@ -401,37 +489,37 @@ function ConnectionsTable(keepOpen)
                 };
             end
             i = i + 1;
-            j = j + 1;
         end
-        buttons[28] = {
+        local j = #buttons + 1;
+        buttons[j] = {
             x = 2 * buttonWidth,
-            y = 140,
+            y = 40 + (i - 1) * 20,
             w = buttonWidth * 0.15,
             h = 20,
             bg = colour,
             txt = "<"
         };
-        buttons[29] = {
-            x = 2 * buttonWidth + buttons[28].w,
-            y = 140,
+        buttons[j + 1] = {
+            x = 2 * buttonWidth + buttons[j].w,
+            y = 40 + (i - 1) * 20,
             w = buttonWidth * 0.7,
             h = 20,
             bg = colour,
             txt = "Page: " .. connectionsPage + 1
         };
-        buttons[30] = {
-            x = 2 * buttonWidth + buttons[28].w + buttons[29].w,
-            y = 140,
+        buttons[j + 2] = {
+            x = 2 * buttonWidth + buttons[j].w + buttons[j + 1].w,
+            y = 40 + (i - 1) * 20,
             w = buttonWidth * 0.15,
             h = 20,
             bg = colour,
             txt = ">"
         };
-        
-        
+        connectionsTabOpen = true;
     else
         for i = 8, #buttons, 1 do
             buttons[i] = nil;
         end
+        connectionsTabOpen = false;
     end
 end
