@@ -15,6 +15,8 @@ local connectionsPage = 0;
 local connectionsTabOpen = false;
 local origin, destination = -1, -1;
 
+local route = {};
+
 local mousex, mousey = 0, 0;
 
 Object = require "classic";
@@ -51,22 +53,6 @@ function love.load()
         bg = {173/255, 216/255, 230/255},
         txt = "Connections"
     };
-    buttons[7] = {
-        x = 0,
-        y = 0,
-        w = 0,
-        h = 40,
-        bg = {1, 99/255, 71/255},
-        txt = "Reset"
-    };
-    buttons[6] = {
-        x = 0,
-        y = 0,
-        w = 0,
-        h = 40,
-        bg = {240/255, 230/255, 140/255},
-        txt = "Calculate"
-    };
     buttons[4] = {
         x = 0,
         y = 0,
@@ -82,6 +68,22 @@ function love.load()
         h = 40,
         bg = {147/255, 112/255, 219/255},
         txt = "Select the destination"
+    };
+    buttons[6] = {
+        x = 0,
+        y = 0,
+        w = 0,
+        h = 40,
+        bg = {240/255, 230/255, 140/255},
+        txt = "Calculate"
+    };
+    buttons[7] = {
+        x = 0,
+        y = 0,
+        w = 0,
+        h = 40,
+        bg = {1, 99/255, 71/255},
+        txt = "Reset"
     };
     --#endregion
 
@@ -141,6 +143,13 @@ function love.draw()
 
     love.graphics.setColor(1, 1, 1);
 
+    local textToPrint = "";
+    for i = #route, 1, -1 do
+        textToPrint = textToPrint .. "R" .. route[i] .. " -> ";
+    end
+
+    love.graphics.print(textToPrint, 0, love.graphics.getHeight() - Font:getHeight());
+
     --#region drawing connections between routers
     for _, connection in pairs(connections) do
         --lines
@@ -162,7 +171,7 @@ function love.draw()
         local avgx, avgy = (x1 + x2) / 2, (y1 + y2) / 2;
         love.graphics.rectangle("fill", avgx - Font:getHeight()/2, avgy - Font:getHeight()/2, 30, Font:getHeight());
         love.graphics.setColor(0, 0, 0);
-        love.graphics.printf(connection.value, math.floor(avgx - Font:getHeight()/2), math.floor(avgy - Font:getHeight()/2), 30, "center"); --rendering text at non-integer intervals may make them blurry
+        love.graphics.printf(connection.cost, math.floor(avgx - Font:getHeight()/2), math.floor(avgy - Font:getHeight()/2), 30, "center"); --rendering text at non-integer intervals may make them blurry
         love.graphics.setColor(1, 1, 1);
     end
     --#endregion
@@ -323,6 +332,7 @@ function love.mousepressed(x, y, button, istouch, presses)
             destination = 0;
         end
     elseif buttonIndex == 6 then
+        Calculate();
     elseif buttonIndex == 7 then
         origin, destination = -1, -1;
         for i, _ in pairs(routers) do
@@ -334,11 +344,11 @@ function love.mousepressed(x, y, button, istouch, presses)
         ConnectionsTab(false);
     elseif buttons[buttonIndex] and buttons[buttonIndex].txt == "+" then
         local i = math.ceil((buttonIndex - 7) / 4);
-        connections[connectionsPage * 5 + i].value = connections[connectionsPage * 5 + i].value + 1;
+        connections[connectionsPage * 5 + i].cost = connections[connectionsPage * 5 + i].cost + 1;
     elseif buttons[buttonIndex] and buttons[buttonIndex].txt == "-" then
         local i = math.ceil((buttonIndex - 7) / 4);
-        if connections[connectionsPage * 5 + i].value > 1 then
-            connections[connectionsPage * 5 + i].value = connections[connectionsPage * 5 + i].value - 1;
+        if connections[connectionsPage * 5 + i].cost > 1 then
+            connections[connectionsPage * 5 + i].cost = connections[connectionsPage * 5 + i].cost - 1;
         end
     elseif buttons[buttonIndex] and buttons[buttonIndex].txt == "X" then
         local i = (buttonIndex - 7) / 4;
@@ -522,4 +532,114 @@ function ConnectionsTab(open)
         end
         connectionsTabOpen = false;
     end
+end
+
+function Calculate()
+
+    usedRouters = {};
+
+    route = SearchRoute(origin); --bad argument to SearchRoute() (table expected, got nil)???
+
+    --[[
+    local o, d = origin, destination; -- these store where we are
+    local originRoute, destinationRoute = {o}, {d}; -- these store the route we've already calculated
+    --local origin
+
+    local found = false;
+    local i = 1; -- from origin: odd, from destination: even
+    while not found and i <= #routers do
+        if i % 2 == 1 then
+            local c = SearchForConnections(o);
+
+            if #c == 0 then
+                return;
+            end
+
+            c = Sort(c);
+
+            local added = false;
+            local j = 1;
+            while j <= #c and not added do
+                if true then
+                --innen
+                end
+            end
+        else
+
+        end
+
+        for k, v in pairs(originRoute) do
+            for l, w in pairs(destinationRoute) do
+                if w == v then
+                    found = true;
+                end
+            end
+        end
+        i = i + 1;
+    end
+    print("found a pair :3");
+    ]]
+end
+
+function SearchRoute(router)
+    table.insert(usedRouters, router);
+    local t = SearchForConnections(router);
+    t = Sort(t);
+
+    for i, connection in pairs(t) do
+        local otherRouter = 0;
+        if connections[connection].r1 == router then
+            otherRouter = connections[connection].r2;
+        else
+            otherRouter = connections[connection].r1;
+        end
+
+        if not Contains(usedRouters, otherRouter) then
+            local u = SearchRoute(otherRouter);
+            return table.insert(u, router);
+        end
+    end
+    return {router};
+end
+
+function SearchForConnections(router)
+    local t = {};
+    for i, connection in pairs(connections) do
+        if connection.r1 == router or connection.r2 == router then
+            table.insert(t, i);
+        end
+    end
+    return t;
+end
+
+function Sort(t)
+    if #t == 1 then
+        return t;
+    end
+
+    local n = #t;
+    local swapped;
+
+    repeat
+        swapped = false;
+        for i=2, n do
+            if connections[t[i-1]].cost > connections[t[i]].cost then
+                local temp = t[i];
+                t[i] = t[i-1];
+                t[i-1] = temp;
+                swapped = true;
+            end
+        end
+    until not swapped;
+
+    return t;
+end
+
+function Contains(t, searched)
+    for i, v in pairs(t) do
+        if v == searched then
+            return true;
+        end
+    end
+    return false;
 end
