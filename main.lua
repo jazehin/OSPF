@@ -2,6 +2,7 @@
 
 local routers = {};
 local routerImage = love.graphics.newImage("res/router.png");
+local deletedRouters = {};
 local connections = {};
 local buttons = {};
 local buttonWidth;
@@ -16,6 +17,8 @@ local connectionsTabOpen = false;
 local origin, destination = -1, -1;
 
 local route = {};
+local usedRouters = {};
+local nextToDestination = {};
 
 local mousex, mousey = 0, 0;
 
@@ -103,7 +106,6 @@ function love.update(dt)
 end
 
 function love.draw()
-    DrawButtons();
     love.graphics.setBackgroundColor(0, 0, 0);
 
     if origin > -1 then
@@ -144,8 +146,11 @@ function love.draw()
     love.graphics.setColor(1, 1, 1);
 
     local textToPrint = "";
-    for i = #route, 1, -1 do
-        textToPrint = textToPrint .. "R" .. route[i] .. " -> ";
+    for i, v in pairs(route) do
+        textToPrint = textToPrint .. "R" .. route[i];
+        if i ~= #route then
+            textToPrint = textToPrint .. " -> ";
+        end
     end
 
     love.graphics.print(textToPrint, 0, love.graphics.getHeight() - Font:getHeight());
@@ -198,6 +203,7 @@ function love.draw()
     end
     --#endregion
 
+    DrawButtons();
 end
 
 function love.keypressed(key)
@@ -229,6 +235,7 @@ function love.mousepressed(x, y, button, istouch, presses)
 
             if routerIndex ~= 0 and routers[routerIndex] then
                 routers[routerIndex] = nil;
+                table.insert(deletedRouters, routerIndex);
             end
         end
     end
@@ -263,7 +270,14 @@ function love.mousepressed(x, y, button, istouch, presses)
 
     --#region placing a new router
     if placingRouter then
-        local i = #routers+1;
+        local i;
+        if deletedRouters[1] then
+            i = deletedRouters[1];
+            deletedRouters[1] = nil;
+            deletedRouters = Pack(deletedRouters);
+        else
+            i = #routers+1;
+        end
         routers[i] = Router(x, y, i);
         placingRouter = false;
     end
@@ -451,12 +465,6 @@ function CreateConnection()
 end
 
 function ConnectionsTab(open)
-
-    -- known problems:
-    -- > switching to different pages does virtually nothing
-    -- > unable to reopen the tab after closing it
-    -- > etc?
-
     if open then
         for i = 8, #buttons, 1 do
             buttons[i] = nil;
@@ -535,71 +543,188 @@ function ConnectionsTab(open)
 end
 
 function Calculate()
+    if origin < 1 or destination < 1 then
+        return;
+    end
 
-    usedRouters = {};
+    function Calculate()
 
-    route = SearchRoute(origin); --bad argument to SearchRoute() (table expected, got nil)???
-
-    --[[
-    local o, d = origin, destination; -- these store where we are
-    local originRoute, destinationRoute = {o}, {d}; -- these store the route we've already calculated
-    --local origin
-
-    local found = false;
-    local i = 1; -- from origin: odd, from destination: even
-    while not found and i <= #routers do
-        if i % 2 == 1 then
-            local c = SearchForConnections(o);
-
-            if #c == 0 then
+        if origin < 1 and destination < 1 then
+            return;
+        end
+    
+        usedRouters = {};
+        route = {};
+        SearchRoute(origin); 
+    
+        --[[
+        local o, d = origin, destination; -- these store where we are
+        local originRoute, destinationRoute = {o}, {d}; -- these store the route we've already calculated
+        --local origin
+    
+        local found = false;
+        local i = 1; -- from origin: odd, from destination: even
+        while not found and i <= #routers do
+            if i % 2 == 1 then
+                local c = SearchForConnections(o);
+    
+                if #c == 0 then
+                    return;
+                end
+    
+                c = Sort(c);
+    
+                local added = false;
+                local j = 1;
+                while j <= #c and not added do
+                    if true then
+                    --innen
+                    end
+                end
+            else
+    
+            end
+    
+            for k, v in pairs(originRoute) do
+                for l, w in pairs(destinationRoute) do
+                    if w == v then
+                        found = true;
+                    end
+                end
+            end
+            i = i + 1;
+        end
+        print("found a pair :3");
+        ]]
+    end
+    
+    function SearchRoute(router)
+        table.insert(route, router);
+        table.insert(usedRouters, router);
+    
+        local t = SearchForConnections(router);
+        t = Sort(t);
+    
+        for i, connection in pairs(t) do
+            local otherRouter = 0;
+            if connections[connection].r1 == router then
+                otherRouter = connections[connection].r2;
+            else
+                otherRouter = connections[connection].r1;
+            end
+    
+            if otherRouter == destination then
+                table.insert(nextToDestination, router);
+            end
+        end
+    
+        local finished = false;
+    
+        for i, connection in pairs(t) do
+            local otherRouter = 0;
+            if connections[connection].r1 == router then
+                otherRouter = connections[connection].r2;
+            else
+                otherRouter = connections[connection].r1;
+            end
+    
+            print(otherRouter, not Contains(usedRouters, otherRouter));
+    
+            if not Contains(usedRouters, otherRouter) then
+                SearchRoute(otherRouter);
                 return;
+            elseif i == #t then
+                finished = true;
             end
-
-            c = Sort(c);
-
-            local added = false;
+        end
+    
+        if finished then
+            Check();
+        end
+    end
+    
+    function Check()
+        --[[
+        --is the last router in the route table the destination? if not, go back the the router before it and add the faulty connection to the usedRouters table
+        if not route[#route] == destination then
+            table.insert(usedRouters, route[#route]);
+            route[#route] = nil;
+            SearchRoute(route[#route]);
+            return;
+        end
+        --]]
+    
+        if #nextToDestination == 1 then
+            return;
+        end
+    
+        local costs = {};
+    
+        for i = 1, #nextToDestination, 1 do
+            costs[i] = {i, 0};
+    
             local j = 1;
-            while j <= #c and not added do
-                if true then
-                --innen
-                end
+            while route[j] ~= nextToDestination do
+                j = j + 1;
+            end
+    
+            for i = 2, j, 1 do
+                costs[i][2] = costs[i][2] + connections[SearchForConnection(route[i - 1], route[i])].cost;
+            end
+    
+            costs[i][2] = costs[i][2] + connections[SearchForConnection(nextToDestination[i], destination)].cost;
+        end
+    
+        costs = Sort(costs);
+    
+        route = {};
+    
+        local j = 1;
+        while route[j] ~= costs[1][1] do
+            j = j + 1;
+        end
+    
+        for i = 1, j, 1 do
+            table.insert(route, costs[1][i]);
+        end
+    
+        table.insert(route, destination); 
+    
+        nextToDestination = {};
+        --[[
+        local j = 1;
+        while route[j] ~= nextToDestination do
+            j = j + 1;
+        end
+    
+        local route1cost = 0;
+        local temp = {route[1]};
+    
+        for i = 2, j, 1 do
+            route1cost = route1cost + connections[SearchForConnection(route[i - 1], route[i])].cost;
+            table.insert(temp, route[i]);
+        end
+    
+        local route2cost = route1cost;
+    
+        for i = j + 1, #route, 1 do
+            route1cost = route1cost + connections[SearchForConnection(route[i - 1], route[i])].cost;
+        end
+    
+        print(nextToDestination, destination);
+        route2cost = route2cost + connections[SearchForConnection(route[nextToDestination], route[destination])].cost;
+    
+        if route1cost < route2cost then
+            for i = j + 1, #route, 1 do
+                table.insert(temp, route[i]);
             end
         else
-
+            table.insert(temp, destination);
         end
-
-        for k, v in pairs(originRoute) do
-            for l, w in pairs(destinationRoute) do
-                if w == v then
-                    found = true;
-                end
-            end
-        end
-        i = i + 1;
+    
+        route = temp;
+        --]]
     end
-    print("found a pair :3");
-    ]]
-end
-
-function SearchRoute(router)
-    table.insert(usedRouters, router);
-    local t = SearchForConnections(router);
-    t = Sort(t);
-
-    for i, connection in pairs(t) do
-        local otherRouter = 0;
-        if connections[connection].r1 == router then
-            otherRouter = connections[connection].r2;
-        else
-            otherRouter = connections[connection].r1;
-        end
-
-        if not Contains(usedRouters, otherRouter) then
-            local u = SearchRoute(otherRouter);
-            return table.insert(u, router);
-        end
-    end
-    return {router};
 end
 
 function SearchForConnections(router)
@@ -612,27 +737,52 @@ function SearchForConnections(router)
     return t;
 end
 
+function SearchForConnection(r1, r2)
+    for i, connection in ipairs(connections) do
+        if (connection.r1 == r1 and connection.r2 == r2) or (connection.r1 == r2 and connection.r2 == r1) then
+            return i;
+        end
+    end
+end
+
 function Sort(t)
     if #t == 1 then
         return t;
     end
 
-    local n = #t;
-    local swapped;
+    if type(t[1]) == "number" then
+        local n = #t;
+        local swapped;
 
-    repeat
-        swapped = false;
-        for i=2, n do
-            if connections[t[i-1]].cost > connections[t[i]].cost then
-                local temp = t[i];
-                t[i] = t[i-1];
-                t[i-1] = temp;
-                swapped = true;
+        repeat
+            swapped = false;
+            for i=2, n do
+                if connections[t[i-1]].cost > connections[t[i]].cost then
+                    t[i], t[i-1] = t[i-1], t[i];
+                    swapped = true;
+                end
             end
-        end
-    until not swapped;
+        until not swapped;
 
-    return t;
+        return t;
+    else
+        local n = #t;
+        local swapped;
+
+        repeat
+            swapped = false;
+            for i=2, n do
+                if t[i - 1][2] > t[i][2] then
+                    t[i], t[i-1] = t[i-1], t[i];
+                    swapped = true;
+                end
+            end
+        until not swapped;
+
+        return t;
+    end
+
+    
 end
 
 function Contains(t, searched)
@@ -642,4 +792,14 @@ function Contains(t, searched)
         end
     end
     return false;
+end
+
+function Pack(t)
+    local i = 1;
+    local temp = {};
+    for j, v in pairs(t) do
+        temp[i] = v;
+        i = i + 1;
+    end
+    return temp;
 end
